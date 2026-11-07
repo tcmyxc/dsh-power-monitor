@@ -34,7 +34,7 @@ const DEFAULT_CONFIG = {
   historyPoints: 90,
 }
 
-const RPC_PREFIX = 'power-monitor/'
+const RPC_CHANNEL = '/power-monitor'
 const ROUTE_PATH = '/plugins/dsh-power-monitor/api'
 const HISTORY_MAX_MINUTES = 60
 
@@ -595,12 +595,16 @@ function registerRpc(ctx, monitor) {
   return ctx.effect(() => {
     const connection = ctx.get('connection')
     const rpc = connection?.rpc
-    if (!rpc) return undefined
-    const disposers = []
+    if (!rpc || typeof rpc.handle !== 'function') return undefined
+    // Never intercept `/api`: Connection allows exactly one interceptor there and
+    // Typert Gateway owns it. Registering a second one at boot either throws (hot
+    // load) or claims the channel first and answers 404 to every packaged Remote,
+    // which breaks the desktop shell's startup RPC. A dedicated channel is the
+    // supported extension point for plugin-owned endpoints.
     const handle = async (endpoint, payload) => {
       try {
-        if (endpoint === `${RPC_PREFIX}snapshot`) return { ok: true, value: monitor.snapshot() }
-        if (endpoint === `${RPC_PREFIX}settings`) return { ok: true, value: monitor.updateSettings(payload) }
+        if (endpoint === 'snapshot') return { ok: true, value: monitor.snapshot() }
+        if (endpoint === 'settings') return { ok: true, value: monitor.updateSettings(payload) }
         return {
           ok: false,
           error: { code: 'power-monitor/unknown-endpoint', message: `Unknown endpoint: ${endpoint}`, details: {} },
@@ -616,31 +620,22 @@ function registerRpc(ctx, monitor) {
         }
       }
     }
+    let dispose
     try {
-      if (typeof rpc.intercept === 'function') {
-        disposers.push(rpc.intercept('/api', (endpoint) => endpoint.startsWith(RPC_PREFIX), handle))
-      }
+      dispose = rpc.handle(RPC_CHANNEL, handle)
     } catch {
-      // A carrier without the shared-channel interceptor falls back to a channel of its own.
-    }
-    try {
-      if (typeof rpc.handle === 'function' && disposers.length === 0) {
-        disposers.push(rpc.handle('power-monitor', handle))
-      }
-    } catch {
-      // Transport unavailable; the HTTP route below still serves the panel.
+      // Transport unavailable; the exact HTTP route below still serves the panel.
+      return undefined
     }
     return () => {
-      for (const dispose of disposers) {
-        try {
-          const result = dispose()
-          if (result && typeof result.then === 'function') result.catch(() => {})
-        } catch {
-          // Disposal is best effort.
-        }
+      try {
+        const result = dispose()
+        if (result && typeof result.then === 'function') result.catch(() => {})
+      } catch {
+        // Disposal is best effort.
       }
     }
-  }, 'power-monitor: rpc')
+  }, 'power-monitor: rpc channel')
 }
 
 function registerRoute(ctx, monitor) {

@@ -13,6 +13,7 @@ window.__ModuleLoader__.load({
     const h = React.createElement
     const NS = 'power-monitor'
     const ENDPOINT = '/plugins/dsh-power-monitor/api'
+    const RPC_CHANNEL = '/power-monitor'
     const POLL_VISIBLE_MS = 2500
     const POLL_HIDDEN_MS = 10000
 
@@ -263,7 +264,7 @@ window.__ModuleLoader__.load({
       if (rpc && typeof rpc.call === 'function') {
         const timeout = withTimeout(timeoutMs)
         try {
-          const result = await rpc.call('/api', 'power-monitor/snapshot', {}, timeout.signal)
+          const result = await rpc.call(RPC_CHANNEL, 'snapshot', {}, timeout.signal)
           if (result && result.ok) return result.value
           rpcError = result?.error?.message || result?.error?.code || 'RPC failed'
         } catch (error) {
@@ -299,7 +300,7 @@ window.__ModuleLoader__.load({
       if (rpc && typeof rpc.call === 'function') {
         const timeout = withTimeout(8000)
         try {
-          const result = await rpc.call('/api', 'power-monitor/settings', patch, timeout.signal)
+          const result = await rpc.call(RPC_CHANNEL, 'settings', patch, timeout.signal)
           if (result && result.ok) return result.value
           rpcError = result?.error?.message || result?.error?.code || 'RPC failed'
         } catch (error) {
