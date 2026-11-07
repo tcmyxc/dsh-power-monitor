@@ -1,0 +1,12 @@
+# dsh-power-monitor: live power draw, energy use and electricity cost.
+# The values below are first-run defaults. The panel stores later edits
+# (tariff, CPU TDP, other hardware) in the monitor's own state file, so a
+# change made in the UI never restarts the plugin.
+- insert:
+    - id: power-monitor
+      name: dsh-power-monitor
+      config:
+        tariff: 0.56
+        currency: CNY
+        cpuTdp: 125
+        baseWatts: 30
