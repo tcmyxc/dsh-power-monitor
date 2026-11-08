@@ -258,7 +258,10 @@ window.__ModuleLoader__.load({
           points: coords.join(' '),
           fill: 'none',
           stroke: 'var(--dsw-alias-brand-primary)',
-          strokeWidth: stretch ? 1.4 : 1.6,
+          // Without this the non-uniform preserveAspectRatio="none" scale stretches
+          // the stroke horizontally, which reads as a much heavier line.
+          vectorEffect: 'non-scaling-stroke',
+          strokeWidth: stretch ? 1 : 1.2,
           strokeLinecap: 'round',
           strokeLinejoin: 'round',
         }),
