@@ -261,7 +261,7 @@ window.__ModuleLoader__.load({
           // Without this the non-uniform preserveAspectRatio="none" scale stretches
           // the stroke horizontally, which reads as a much heavier line.
           vectorEffect: 'non-scaling-stroke',
-          strokeWidth: stretch ? 1 : 1.2,
+          strokeWidth: stretch ? 1.4 : 1.5,
           strokeLinecap: 'round',
           strokeLinejoin: 'round',
         }),
