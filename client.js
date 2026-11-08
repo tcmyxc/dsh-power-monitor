@@ -11,7 +11,6 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react')
     const h = React.createElement
-    const NS = 'power-monitor'
     const ENDPOINT = '/plugins/dsh-power-monitor/api'
     const RPC_CHANNEL = '/power-monitor'
     const POLL_VISIBLE_MS = 2500
@@ -45,6 +44,8 @@ window.__ModuleLoader__.load({
         gpuSourceNone: 'No GPU power source',
         hint: 'Run LibreHardwareMonitor with its web server on port 8085 for measured CPU power.',
         efficiency: 'PSU efficiency',
+        switchToChinese: 'Switch this card to Chinese',
+        switchToEnglish: 'Switch this card to English',
       },
       'zh-CN': {
         title: '功耗监控',
@@ -73,6 +74,8 @@ window.__ModuleLoader__.load({
         gpuSourceNone: '没有可用的 GPU 功耗来源',
         hint: '安装并启动 LibreHardwareMonitor，开启 Web 服务器（8085 端口）后可获得实测 CPU 功耗。',
         efficiency: '电源效率',
+        switchToChinese: '把这张卡片切换为中文',
+        switchToEnglish: '把这张卡片切换为英文',
       },
     }
     DICTS.zh = DICTS['zh-CN']
@@ -133,28 +136,17 @@ window.__ModuleLoader__.load({
       .pm-fail { color: var(--dsw-alias-state-error-primary); font-size: 11px; overflow-wrap: anywhere; }
       .pm-hint { font-size: 11px; line-height: 15px; color: var(--dsw-alias-label-secondary); }
       .pm-hint b { color: var(--dsw-alias-label-primary); font-weight: 500; }
+      .pm-lang { margin-left: auto; flex: none; height: 18px; padding: 0 6px; border-radius: 5px; border: 1px solid var(--dsw-alias-border-l1); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 10px; line-height: 16px; cursor: pointer; }
+      .pm-lang:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
+      .pm-lang:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
       .pm-rail-card { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 40px; padding: 5px 0; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 10px; line-height: 13px; font-variant-numeric: tabular-nums; }
       .pm-rail-card[data-state="error"] { color: var(--dsw-alias-state-warn-primary); }
     `
 
-    function translate(ctx) {
-      const locale = ctx.get('locale')
-      let bound = null
-      if (locale) {
-        try {
-          bound = locale.bind(NS)
-        } catch {
-          bound = null
-        }
-      }
+    function translate(lang) {
+      const dict = DICTS[lang] ?? DICTS.en
       return (key, params) => {
-        let text = key
-        try {
-          const value = bound ? bound(key) : key
-          if (typeof value === 'string' && value !== '') text = value
-        } catch {
-          text = key
-        }
+        let text = typeof dict[key] === 'string' ? dict[key] : key
         if (params) {
           text = text.replace(/\{(\w+)\}/g, (match, name) =>
             Object.prototype.hasOwnProperty.call(params, name) ? String(params[name]) : match,
@@ -164,15 +156,49 @@ window.__ModuleLoader__.load({
       }
     }
 
-    function useTranslate(ctx) {
+    const LANG_KEY = 'dsh-power-monitor:lang'
+
+    function readStoredLang() {
+      try {
+        const value = localStorage.getItem(LANG_KEY)
+        if (value === 'zh' || value === 'en') return value
+      } catch {
+        // Storage may be unavailable; fall back to the application locale.
+      }
+      return null
+    }
+
+    /**
+     * Card language: an explicit choice from the 中/EN button wins, otherwise the
+     * application locale decides. Text comes from the local dictionaries, so the
+     * card renders correctly even when the locale service has no dictionary.
+     */
+    function useLang(ctx) {
       const locale = ctx.get('locale')
+      const [stored, setStored] = React.useState(readStoredLang)
       const subscribe = React.useCallback(
         (callback) => (locale ? locale.subscribe(callback) : () => {}),
         [locale],
       )
       const getRevision = React.useCallback(() => (locale ? locale.getSnapshot().revision : 0), [locale])
       React.useSyncExternalStore(subscribe, getRevision, getRevision)
-      return translate(ctx)
+      let active = ''
+      try {
+        active = locale?.getSnapshot?.().active ?? ''
+      } catch {
+        active = ''
+      }
+      const lang = stored ?? (/^zh/i.test(active) ? 'zh' : 'en')
+      const toggle = React.useCallback(() => {
+        const next = lang === 'zh' ? 'en' : 'zh'
+        setStored(next)
+        try {
+          localStorage.setItem(LANG_KEY, next)
+        } catch {
+          // The choice still applies for this page even when it cannot be stored.
+        }
+      }, [lang])
+      return { lang, toggle }
     }
 
     function withTimeout(ms) {
@@ -414,7 +440,8 @@ window.__ModuleLoader__.load({
     }
 
     function PowerFooter({ ctx, wide = true }) {
-      const t = useTranslate(ctx)
+      const { lang, toggle } = useLang(ctx)
+      const t = translate(lang)
       const [open, setOpen] = React.useState(false)
       const [version, setVersion] = React.useState(0)
       const state = usePower(ctx, version)
@@ -542,6 +569,17 @@ window.__ModuleLoader__.load({
               { className: 'pm-detail-head' },
               h('span', null, t('title')),
               data ? h('span', { className: 'pm-num' }, `${t('run')} ${formatKwh(data.energy.sessionWh)} kWh`) : null,
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'pm-lang',
+                  title: lang === 'zh' ? t('switchToEnglish') : t('switchToChinese'),
+                  'aria-label': lang === 'zh' ? t('switchToEnglish') : t('switchToChinese'),
+                  onClick: toggle,
+                },
+                lang === 'zh' ? 'EN' : '中',
+              ),
             ),
             data
               ? h(
@@ -622,29 +660,6 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
-        const locale = ctx.get('locale')
-        if (locale) {
-          ctx.effect(() => {
-            const disposers = []
-            for (const [id, dict] of Object.entries(DICTS)) {
-              try {
-                disposers.push(locale.register(NS, id, dict))
-              } catch {
-                // A dictionary already owned by this locale is left untouched.
-              }
-            }
-            return () => {
-              for (const dispose of disposers) {
-                try {
-                  dispose()
-                } catch {
-                  // Ignore duplicate disposal.
-                }
-              }
-            }
-          }, 'power-monitor: locale dictionaries')
-        }
-
         ctx.effect(() => mountStyles(), 'power-monitor: styles')
 
         ctx.effect(
